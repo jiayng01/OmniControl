@@ -42,7 +42,7 @@ class TrainLoop:
 
         self.step = 0
         self.resume_step = 0
-        self.global_batch = self.batch_size # * dist.get_world_size()
+        self.global_batch = self.batch_size  # * dist.get_world_size()
         self.num_steps = args.num_steps
         self.num_epochs = self.num_steps // len(self.data) + 1
 
@@ -63,15 +63,17 @@ class TrainLoop:
         )
         # if self.resume_step:
         #     self._load_optimizer_state()
-            # Model was resumed, either due to a restart or a checkpoint
-            # being specified at the command line.
+        # Model was resumed, either due to a restart or a checkpoint
+        # being specified at the command line.
 
         self.device = torch.device("cpu")
-        if torch.cuda.is_available() and dist_util.dev() != 'cpu':
+        if torch.cuda.is_available() and dist_util.dev() != "cpu":
             self.device = torch.device(dist_util.dev())
 
-        self.schedule_sampler_type = 'uniform'
-        self.schedule_sampler = create_named_schedule_sampler(self.schedule_sampler_type, diffusion)
+        self.schedule_sampler_type = "uniform"
+        self.schedule_sampler = create_named_schedule_sampler(
+            self.schedule_sampler_type, diffusion
+        )
         self.eval_wrapper, self.eval_data, self.eval_gt_data = None, None, None
         self.use_ddp = False
         self.ddp_model = self.model
@@ -85,7 +87,8 @@ class TrainLoop:
             self.model.load_state_dict(
                 dist_util.load_state_dict(
                     resume_checkpoint, map_location=dist_util.dev()
-                ), strict=False
+                ),
+                strict=False,
             )
 
     def _load_optimizer_state(self):
@@ -101,26 +104,40 @@ class TrainLoop:
             self.opt.load_state_dict(state_dict)
 
     def run_loop(self):
-
         for epoch in range(self.num_epochs):
-            print(f'Starting epoch {epoch}')
+            print(f"Starting epoch {epoch}")
             for motion, cond in tqdm(self.data):
-                if not (not self.lr_anneal_steps or self.step + self.resume_step < self.lr_anneal_steps):
+                if not (
+                    not self.lr_anneal_steps
+                    or self.step + self.resume_step < self.lr_anneal_steps
+                ):
                     break
 
                 motion = motion.to(self.device)
-                cond['y'] = {key: val.to(self.device) if torch.is_tensor(val) else val for key, val in cond['y'].items()}
+                cond["y"] = {
+                    key: val.to(self.device) if torch.is_tensor(val) else val
+                    for key, val in cond["y"].items()
+                }
 
                 self.run_step(motion, cond)
                 if self.step % self.log_interval == 0:
-                    for k,v in logger.get_current().name2val.items():
-                        if k == 'loss':
-                            print('step[{}]: loss[{:0.5f}]'.format(self.step+self.resume_step, v))
+                    # for k,v in logger.get_current().name2val.items(): # fix: MDM 5a15496
+                    for k, v in (
+                        logger.get_current().dumpkvs().items()
+                    ):  # fix: MDM 5a15496
+                        if k == "loss":
+                            print(
+                                "step[{}]: loss[{:0.5f}]".format(
+                                    self.step + self.resume_step, v
+                                )
+                            )
 
-                        if k in ['step', 'samples'] or '_q' in k:
+                        if k in ["step", "samples"] or "_q" in k:
                             continue
                         else:
-                            self.train_platform.report_scalar(name=k, value=v, iteration=self.step, group_name='Loss')
+                            self.train_platform.report_scalar(
+                                name=k, value=v, iteration=self.step, group_name="Loss"
+                            )
 
                 if self.step % self.save_interval == 0:
                     self.save()
@@ -132,7 +149,10 @@ class TrainLoop:
                     if os.environ.get("DIFFUSION_TRAINING_TEST", "") and self.step > 0:
                         return
                 self.step += 1
-            if not (not self.lr_anneal_steps or self.step + self.resume_step < self.lr_anneal_steps):
+            if not (
+                not self.lr_anneal_steps
+                or self.step + self.resume_step < self.lr_anneal_steps
+            ):
                 break
         # Save the last checkpoint if it wasn't already saved.
         if (self.step - 1) % self.save_interval != 0:
@@ -165,7 +185,7 @@ class TrainLoop:
                 micro,  # [bs, ch, image_size, image_size]
                 t,  # [bs](int) sampled timesteps
                 model_kwargs=micro_cond,
-                dataset=self.data.dataset
+                dataset=self.data.dataset,
             )
 
             if last_batch or not self.use_ddp:
@@ -198,17 +218,15 @@ class TrainLoop:
         logger.logkv("step", self.step + self.resume_step)
         logger.logkv("samples", (self.step + self.resume_step + 1) * self.global_batch)
 
-
     def ckpt_file_name(self):
         return f"model{(self.step+self.resume_step):09d}.pt"
-
 
     def save(self):
         def save_checkpoint(params):
             state_dict = self.mp_trainer.master_params_to_state_dict(params)
 
             # Do not save CLIP weights
-            clip_weights = [e for e in state_dict.keys() if e.startswith('clip_model.')]
+            clip_weights = [e for e in state_dict.keys() if e.startswith("clip_model.")]
             for e in clip_weights:
                 del state_dict[e]
 
