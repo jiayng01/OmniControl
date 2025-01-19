@@ -3,6 +3,7 @@
 Generate a large batch of image samples from a model and save them as a large
 numpy array. This can be used to produce samples for FID evaluation.
 """
+import time
 from utils.fixseed import fixseed
 import os
 import numpy as np
@@ -115,6 +116,9 @@ def main():
     all_hint = []
     all_hint_for_vis = []
 
+    # mean inference times for a sample in a batch in each repetition
+    rep_infer_times = []
+
     for rep_i in range(args.num_repetitions):
         print(f"### Sampling [repetitions #{rep_i}]")
 
@@ -126,6 +130,8 @@ def main():
             )
 
         sample_fn = diffusion.p_sample_loop
+
+        batch_infer_start = time.time()
 
         sample = sample_fn(
             model,
@@ -141,7 +147,13 @@ def main():
             const_noise=False,
         )
 
-        sample = sample[:, :263]
+        batch_infer_time = time.time() - batch_infer_start
+        mean_samp_infer_time = batch_infer_time / args.batch_size
+        rep_infer_times.append(mean_samp_infer_time)
+
+        sample = sample[
+            :, :263
+        ]  # dimension of human pose representations, D = 263 in HumanML3D
         # Recover XYZ *positions* from HumanML3D vector representation
         if model.data_rep == "hml_vec":
             n_joints = 22 if sample.shape[1] == 263 else 21
@@ -209,6 +221,8 @@ def main():
         all_lengths.append(model_kwargs["y"]["lengths"].cpu().numpy())
 
         print(f"created {len(all_motions) * args.batch_size} samples")
+
+    print(f"Average inference time per sample: {np.mean(rep_infer_times):.3f} seconds")
 
     all_motions = np.concatenate(all_motions, axis=0)
     all_motions = all_motions[:total_num_samples]  # [bs, njoints, 6, seqlen]

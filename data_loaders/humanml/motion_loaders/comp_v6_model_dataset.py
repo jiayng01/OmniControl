@@ -48,7 +48,13 @@ class CompMDMGeneratedDataset(Dataset):
         model.eval()
 
         with torch.no_grad():
+            total_sampled = 0
+            batch_infer_times = []
+
             for i, (motion, model_kwargs) in tqdm(enumerate(dataloader)):
+                print(f"========== Sampling batch {i} ==========")
+                print(f"motion.shape: {motion.shape}")
+
                 for k, v in model_kwargs["y"].items():
                     if torch.is_tensor(v):
                         model_kwargs["y"][k] = v.to(dist_util.dev())
@@ -71,7 +77,12 @@ class CompMDMGeneratedDataset(Dataset):
                 is_mm = i in mm_idxs
                 repeat_times = mm_num_repeats if is_mm else 1
                 mm_motions = []
+
+                rep_infer_times = []
+
                 for t in range(repeat_times):
+                    rep_infer_start = time.time()
+
                     sample = sample_fn(
                         model,
                         motion.shape,
@@ -85,6 +96,11 @@ class CompMDMGeneratedDataset(Dataset):
                         const_noise=False,
                         # when experimenting guidance_scale we want to nutrileze the effect of noise on generation
                     )
+
+                    rep_infer_time = time.time() - rep_infer_start
+                    print(f"rep_infer_time: {rep_infer_time}")
+                    rep_infer_times.append(rep_infer_time)
+                    total_sampled += motion.shape[0]
 
                     if t == 0:
                         # sub_dicts = [{'motion': sample[bs_i].squeeze().permute(1,0).cpu().numpy(),
@@ -144,6 +160,14 @@ class CompMDMGeneratedDataset(Dataset):
                         }
                         for bs_i in range(dataloader.batch_size)
                     ]
+
+                # mean infer time for the batch across repetitions
+                batch_infer_times.append(np.mean(rep_infer_times))
+
+        print(f"Total sampled: {total_sampled}")
+        print(
+            f"Average inference time per sample: {np.sum(batch_infer_times)/ total_sampled}"
+        )
 
         self.generated_motion = generated_motion
         self.mm_generated_motion = mm_generated_motions
