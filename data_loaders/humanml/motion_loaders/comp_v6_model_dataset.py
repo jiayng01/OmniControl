@@ -124,6 +124,11 @@ class CompMDMGeneratedDataset(Dataset):
                                 .numpy(),
                                 "caption": model_kwargs["y"]["text"][bs_i],
                                 "tokens": tokens[bs_i],
+                                "hint": (
+                                    model_kwargs["y"]["hint"][bs_i].cpu().numpy()
+                                    if "hint" in model_kwargs["y"]
+                                    else None
+                                ),
                                 # Fixed cap_len calculation (changed from from len(tokens[bs_i]))
                                 # Lead to improved R-precision and Multimodal Dist.
                                 # issue: https://github.com/GuyTevet/motion-diffusion-model/issues/182
