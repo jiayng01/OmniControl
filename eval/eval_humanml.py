@@ -479,6 +479,10 @@ if __name__ == "__main__":
     log_file += ".log"
     print(f"Will save to log file [{log_file}]")
 
+    time_log_file = log_file.replace(".log", "_time.log")
+    time_log_file = time_log_file.replace("eval_humanml", "times/eval_humanml")
+    print(f"Will save time to log file [{time_log_file}]")
+
     print(f"Eval mode [{args.eval_mode}]")
     if args.eval_mode == "omnicontrol":
         num_samples_limit = 1000  # None means no limit (eval over all dataset)
@@ -545,6 +549,7 @@ if __name__ == "__main__":
             num_samples_limit,
             args.guidance_param,
             args.use_ddim,
+            log_dir=time_log_file,
         )
     }
 

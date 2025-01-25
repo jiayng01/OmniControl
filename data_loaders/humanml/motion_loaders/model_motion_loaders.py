@@ -58,6 +58,7 @@ def get_mdm_loader(
     num_samples_limit,
     scale,
     use_ddim,
+    log_dir=None,
 ):
     opt = {
         "name": "test",  # FIXME
@@ -74,6 +75,7 @@ def get_mdm_loader(
         num_samples_limit,
         scale,
         use_ddim,
+        log_dir=log_dir,
     )
 
     mm_dataset = MMGeneratedDataset(

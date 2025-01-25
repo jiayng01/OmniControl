@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 import torch
 from data_loaders.humanml.networks.modules import *
 from torch.utils.data import Dataset
@@ -18,7 +19,17 @@ class CompMDMGeneratedDataset(Dataset):
         num_samples_limit,
         scale=1.0,
         use_ddim=False,
+        log_dir=None,
     ):
+        # log all prints to a file
+        if log_dir is not None:
+            logging.basicConfig(
+                filename=log_dir,
+                level=logging.INFO,  # Set log level
+                format="%(asctime)s - %(levelname)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+
         self.dataloader = dataloader
         self.dataset = dataloader.dataset
         assert mm_num_samples < len(dataloader.dataset)
@@ -29,11 +40,13 @@ class CompMDMGeneratedDataset(Dataset):
             diffusion.p_sample_loop if not use_ddim else diffusion.ddim_sample_loop
         )
         print(f"Use DDIM: {use_ddim}")
+        logging.info(f"Use DDIM: {use_ddim}")
 
         real_num_batches = len(dataloader)
         if num_samples_limit is not None:
             real_num_batches = num_samples_limit // dataloader.batch_size + 1
         print("real_num_batches", real_num_batches)
+        logging.info(f"real_num_batches: {real_num_batches}")
 
         generated_motion = []
         mm_generated_motions = []
@@ -56,6 +69,7 @@ class CompMDMGeneratedDataset(Dataset):
 
             for i, (motion, model_kwargs) in tqdm(enumerate(dataloader)):
                 print(f"========== Sampling batch {i} ==========")
+                logging.info(f"========== Sampling batch {i} ==========")
                 # print(f"motion.shape: {motion.shape}")
 
                 for k, v in model_kwargs["y"].items():
@@ -101,7 +115,9 @@ class CompMDMGeneratedDataset(Dataset):
                     )
 
                     rep_infer_time = time.time() - rep_infer_start
-                    print(f"Time: {datetime.now()}, rep_infer_time: {rep_infer_time}")
+                    logging.info(
+                        f"Time: {datetime.now()}, rep_infer_time: {rep_infer_time}"
+                    )
                     rep_infer_times.append(rep_infer_time)
                     total_sampled += motion.shape[0]
 
@@ -172,10 +188,13 @@ class CompMDMGeneratedDataset(Dataset):
                 # mean infer time for the batch across repetitions
                 batch_infer_times.append(np.mean(rep_infer_times))
 
-        print(f"Total sampled: {total_sampled}")
-        print(f"Time: {datetime.now()}")
+        logging.info(f"Total sampled: {total_sampled}")
+        logging.info(f"Time: {datetime.now()}")
+        logging.info(
+            f"Average inference time per sample: {(np.sum(batch_infer_times)/ total_sampled):.3f}"
+        )
         print(
-            f"Average inference time per sample: {np.sum(batch_infer_times)/ total_sampled}"
+            f"Average inference time per sample: {(np.sum(batch_infer_times)/ total_sampled):.3f}"
         )
 
         self.generated_motion = generated_motion
