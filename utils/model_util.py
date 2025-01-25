@@ -72,7 +72,8 @@ def create_gaussian_diffusion(args):
     # steps = 1000 # fix from MDM
     steps = args.diffusion_steps  # fix from MDM
     scale_beta = 1.0  # no scaling
-    timestep_respacing = ""  # can be used for ddim sampling, we don't use it.
+    # timestep_respacing = ""  # can be used for ddim sampling, we don't use it.
+    timestep_respacing = args.timestep_respacing
     learn_sigma = False
     rescale_timesteps = False
 
@@ -81,6 +82,8 @@ def create_gaussian_diffusion(args):
 
     if not timestep_respacing:
         timestep_respacing = [steps]
+
+    print(f"steps:{steps}, timestep_respacing:{timestep_respacing}")
 
     return SpacedDiffusion(
         use_timesteps=space_timesteps(steps, timestep_respacing),

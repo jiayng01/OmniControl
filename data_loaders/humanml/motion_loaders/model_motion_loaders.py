@@ -1,5 +1,7 @@
 from torch.utils.data import DataLoader, Dataset
-from data_loaders.humanml.motion_loaders.comp_v6_model_dataset import CompMDMGeneratedDataset
+from data_loaders.humanml.motion_loaders.comp_v6_model_dataset import (
+    CompMDMGeneratedDataset,
+)
 import numpy as np
 from torch.utils.data._utils.collate import default_collate
 
@@ -20,12 +22,12 @@ class MMGeneratedDataset(Dataset):
 
     def __getitem__(self, item):
         data = self.dataset[item]
-        mm_motions = data['mm_motions']
+        mm_motions = data["mm_motions"]
         m_lens = []
         motions = []
         for mm_motion in mm_motions:
-            m_lens.append(mm_motion['length'])
-            motion = mm_motion['motion']
+            m_lens.append(mm_motion["length"])
+            motion = mm_motion["motion"]
             # We don't need the following logic because our sample func generates the full tensor anyway:
             # if len(motion) < self.opt.max_motion_length:
             #     motion = np.concatenate([motion,
@@ -45,20 +47,49 @@ class MMGeneratedDataset(Dataset):
 
 
 # our loader
-def get_mdm_loader(model, diffusion, batch_size, ground_truth_loader, mm_num_samples, mm_num_repeats, max_motion_length, num_samples_limit, scale):
+def get_mdm_loader(
+    model,
+    diffusion,
+    batch_size,
+    ground_truth_loader,
+    mm_num_samples,
+    mm_num_repeats,
+    max_motion_length,
+    num_samples_limit,
+    scale,
+    use_ddim,
+):
     opt = {
-        'name': 'test',  # FIXME
+        "name": "test",  # FIXME
     }
-    print('Generating %s ...' % opt['name'])
+    print("Generating %s ..." % opt["name"])
     # dataset = CompMDMGeneratedDataset(opt, ground_truth_dataset, ground_truth_dataset.w_vectorizer, mm_num_samples, mm_num_repeats)
-    dataset = CompMDMGeneratedDataset(model, diffusion, ground_truth_loader, mm_num_samples, mm_num_repeats, max_motion_length, num_samples_limit, scale)
+    dataset = CompMDMGeneratedDataset(
+        model,
+        diffusion,
+        ground_truth_loader,
+        mm_num_samples,
+        mm_num_repeats,
+        max_motion_length,
+        num_samples_limit,
+        scale,
+        use_ddim,
+    )
 
-    mm_dataset = MMGeneratedDataset(opt, dataset, ground_truth_loader.dataset.w_vectorizer)
+    mm_dataset = MMGeneratedDataset(
+        opt, dataset, ground_truth_loader.dataset.w_vectorizer
+    )
 
     # NOTE: bs must not be changed! this will cause a bug in R precision calc!
-    motion_loader = DataLoader(dataset, batch_size=batch_size, collate_fn=collate_fn, drop_last=True, num_workers=4)
+    motion_loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        collate_fn=collate_fn,
+        drop_last=True,
+        num_workers=4,
+    )
     mm_motion_loader = DataLoader(mm_dataset, batch_size=1, num_workers=1)
 
-    print('Generated Dataset Loading Completed!!!')
+    print("Generated Dataset Loading Completed!!!")
 
     return motion_loader, mm_motion_loader

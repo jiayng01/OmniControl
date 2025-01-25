@@ -129,7 +129,14 @@ def main():
                 * args.guidance_param
             )
 
-        sample_fn = diffusion.p_sample_loop
+        # sample_fn = diffusion.p_sample_loop
+
+        print(f"Use DDIM: {args.use_ddim}")
+        sample_fn = (
+            diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
+        )
+        if args.use_ddim:
+            out_path += f"_{args.timestep_respacing}"
 
         batch_infer_start = time.time()
 

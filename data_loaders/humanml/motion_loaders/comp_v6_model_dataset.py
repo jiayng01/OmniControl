@@ -1,3 +1,4 @@
+from datetime import datetime
 import torch
 from data_loaders.humanml.networks.modules import *
 from torch.utils.data import Dataset
@@ -16,16 +17,18 @@ class CompMDMGeneratedDataset(Dataset):
         max_motion_length,
         num_samples_limit,
         scale=1.0,
+        use_ddim=False,
     ):
         self.dataloader = dataloader
         self.dataset = dataloader.dataset
         assert mm_num_samples < len(dataloader.dataset)
-        use_ddim = False  # FIXME - hardcoded
+        # use_ddim = False  # FIXME - hardcoded
         clip_denoised = False  # FIXME - hardcoded
         self.max_motion_length = max_motion_length
         sample_fn = (
             diffusion.p_sample_loop if not use_ddim else diffusion.ddim_sample_loop
         )
+        print(f"Use DDIM: {use_ddim}")
 
         real_num_batches = len(dataloader)
         if num_samples_limit is not None:
@@ -53,7 +56,7 @@ class CompMDMGeneratedDataset(Dataset):
 
             for i, (motion, model_kwargs) in tqdm(enumerate(dataloader)):
                 print(f"========== Sampling batch {i} ==========")
-                print(f"motion.shape: {motion.shape}")
+                # print(f"motion.shape: {motion.shape}")
 
                 for k, v in model_kwargs["y"].items():
                     if torch.is_tensor(v):
@@ -98,7 +101,7 @@ class CompMDMGeneratedDataset(Dataset):
                     )
 
                     rep_infer_time = time.time() - rep_infer_start
-                    print(f"rep_infer_time: {rep_infer_time}")
+                    print(f"Time: {datetime.now()}, rep_infer_time: {rep_infer_time}")
                     rep_infer_times.append(rep_infer_time)
                     total_sampled += motion.shape[0]
 
@@ -170,6 +173,7 @@ class CompMDMGeneratedDataset(Dataset):
                 batch_infer_times.append(np.mean(rep_infer_times))
 
         print(f"Total sampled: {total_sampled}")
+        print(f"Time: {datetime.now()}")
         print(
             f"Average inference time per sample: {np.sum(batch_infer_times)/ total_sampled}"
         )
