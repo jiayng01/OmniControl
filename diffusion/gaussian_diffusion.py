@@ -763,13 +763,26 @@ class GaussianDiffusion:
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
-        const_noise=False,
         eta=0.0,
     ):
         """
-        Sample x_{t-1} from the model using DDIM.
+        DDIM Step: Computes deterministic or stochastic update to x_{t-1}.
 
-        Same usage as p_sample().
+        Implements Eq. (12) from DDIM paper:
+            x_{t-1} = sqrt(alpha_bar_prev) * pred_xstart + sqrt(1 - alpha_bar_prev - sigma^2) * eps + sigma * noise
+
+        Arguments:
+            model: The diffusion model.
+            x: Current noisy sample x_t.
+            t: Current timestep.
+            clip_denoised: Whether to clip x_0 predictions.
+            eta: Controls stochasticity (eta=0 is deterministic DDIM).
+            model_kwargs: Any additional arguments to pass to model.
+
+        Returns:
+            A dictionary with keys:
+            - "sample": The next sample x_{t-1}.
+            - "pred_xstart": The predicted clean image.
         """
         out = self.p_mean_variance(
             model,
@@ -780,18 +793,10 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
         )
 
-        # spatial guidance
-        if "hint" in model_kwargs["y"].keys():
-            out["mean"] = self.guide(out["mean"], t, model_kwargs=model_kwargs)
-
-        if cond_fn is not None:
-            print("cond_fn not None")
-            out["mean"] = self.condition_mean(
-                cond_fn, out, x, t, model_kwargs=model_kwargs
-            )
-
-        # Get required quantities
+        # Predict noise from x_t and x_0
         eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
+
+        # Compute DDIM step coefficients
         alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
         alpha_bar_prev = _extract_into_tensor(self.alphas_cumprod_prev, t, x.shape)
         sigma = (
@@ -800,20 +805,19 @@ class GaussianDiffusion:
             * torch.sqrt(1 - alpha_bar / alpha_bar_prev)
         )
 
-        # DDIM mean prediction formula
+        # Compute deterministic mean update
         mean = (
             out["pred_xstart"] * torch.sqrt(alpha_bar_prev)
             + torch.sqrt(1 - alpha_bar_prev - sigma**2) * eps
         )
 
-        if const_noise:
-            noise = th.randn_like(x[0])
-            noise = noise[None].repeat(x.shape[0], 1, 1, 1)
-        else:
-            noise = th.randn_like(x)
+        # Apply optional stochasticity
+        noise = torch.randn_like(x) if eta > 0 else 0
+        sample = mean + sigma * noise
 
-        nonzero_mask = (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
-        sample = mean + nonzero_mask * sigma * noise
+        # Apply spatial guidance if available
+        if "hint" in model_kwargs["y"].keys():
+            sample = self.guide(sample, t, model_kwargs=model_kwargs)
 
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
@@ -831,29 +835,24 @@ class GaussianDiffusion:
         eta=0.0,
         skip_timesteps=0,
         init_image=None,
-        randomize_class=False,
-        cond_fn_with_grad=False,
-        dump_steps=None,
-        const_noise=False,
     ):
         """
-        Generate samples from the model using DDIM.
+        DDIM Sampling Loop: Iteratively applies ddim_sample() from T to 0.
 
-        Same usage as p_sample_loop().
+        Same function signature as p_sample_loop.
+
+        Arguments:
+            model: The diffusion model.
+            shape: Output shape.
+            noise: Initial noise (None = sample from Gaussian).
+            eta: Stochasticity factor (0 = deterministic DDIM).
+            progress: Whether to show tqdm progress bar.
+
+        Returns:
+            Generated sample after DDIM inference.
         """
-        if dump_steps is not None:
-            raise NotImplementedError()
-        if const_noise == True:
-            raise NotImplementedError()
-
-        # fix from MDM: 94c173f
-        if "text" in model_kwargs["y"].keys():
-            # encoding once instead of each iteration saves lots of time
-            model_kwargs["y"]["text_embed"] = model.encode_text(
-                model_kwargs["y"]["text"]
-            )
-
         final = None
+
         for sample in self.ddim_sample_loop_progressive(
             model,
             shape,
@@ -867,10 +866,9 @@ class GaussianDiffusion:
             eta=eta,
             skip_timesteps=skip_timesteps,
             init_image=init_image,
-            randomize_class=randomize_class,
-            cond_fn_with_grad=cond_fn_with_grad,
         ):
             final = sample
+
         return final["sample"]
 
     def ddim_sample_loop_progressive(
@@ -887,54 +885,34 @@ class GaussianDiffusion:
         eta=0.0,
         skip_timesteps=0,
         init_image=None,
-        randomize_class=False,
-        cond_fn_with_grad=False,
     ):
         """
-        Use DDIM to sample from the model and yield intermediate samples from
-        each timestep of DDIM.
+        DDIM Sampling Loop with Progressive Outputs.
 
-        Same usage as p_sample_loop_progressive().
+        Yields intermediate samples at each timestep.
+
+        Same function signature as p_sample_loop_progressive.
         """
         if device is None:
             device = next(model.parameters()).device
-        assert isinstance(shape, (tuple, list))
-        if noise is not None:
-            img = noise
-        else:
-            img = th.randn(*shape, device=device)
 
-        if skip_timesteps and init_image is None:
-            init_image = th.zeros_like(img)
+        img = noise if noise is not None else torch.randn(*shape, device=device)
 
         indices = list(range(self.num_timesteps - skip_timesteps))[::-1]
 
         if init_image is not None:
-            my_t = th.ones([shape[0]], device=device, dtype=th.long) * indices[0]
+            my_t = torch.ones([shape[0]], device=device, dtype=torch.long) * indices[0]
             img = self.q_sample(init_image, my_t, img)
 
         if progress:
-            # Lazy import so that we don't depend on tqdm.
             from tqdm.auto import tqdm
 
             indices = tqdm(indices)
 
         for i in indices:
-            t = th.tensor([i] * shape[0], device=device)
-            if randomize_class and "y" in model_kwargs:
-                model_kwargs["y"] = th.randint(
-                    low=0,
-                    high=model.num_classes,
-                    size=model_kwargs["y"].shape,
-                    device=model_kwargs["y"].device,
-                )
-            with th.no_grad():
-                sample_fn = (
-                    self.ddim_sample_with_grad
-                    if cond_fn_with_grad
-                    else self.ddim_sample
-                )
-                out = sample_fn(
+            t = torch.tensor([i] * shape[0], device=device)
+            with torch.no_grad():
+                out = self.ddim_sample(
                     model,
                     img,
                     t,
