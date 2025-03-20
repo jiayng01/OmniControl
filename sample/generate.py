@@ -155,6 +155,9 @@ def main():
         )
 
         batch_infer_time = time.time() - batch_infer_start
+        print(
+            f"Batch size: {args.batch_size}, Batch inference time: {batch_infer_time:.3f} seconds"
+        )
         mean_samp_infer_time = batch_infer_time / args.batch_size
         rep_infer_times.append(mean_samp_infer_time)
 
