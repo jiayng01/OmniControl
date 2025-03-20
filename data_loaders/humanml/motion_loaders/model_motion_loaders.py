@@ -73,8 +73,8 @@ def get_mdm_loader(
         mm_num_repeats,
         max_motion_length,
         num_samples_limit,
-        scale,
-        sample_fn,
+        scale=scale,
+        sample_fn=sample_fn,
         log_dir=log_dir,
     )
 
