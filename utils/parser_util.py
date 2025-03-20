@@ -303,6 +303,21 @@ def add_generate_options(parser):
     )
     group.add_argument("--timestep_respacing", default="", type=str)
 
+    # DPM-Solver
+    group.add_argument(
+        "--use_dpm_solver",
+        default=False,
+        action="store_true",
+        help="Use DPM-Solver instead of DDPM.",
+    )
+    group.add_argument(
+        "--dpm_solver_order",
+        default=2,
+        type=int,
+        choices=[1, 2, 3],
+        help="Order of the DPM-Solver (1, 2, or 3).",
+    )
+
 
 def add_edit_options(parser):
     group = parser.add_argument_group("edit")

@@ -57,7 +57,7 @@ def get_mdm_loader(
     max_motion_length,
     num_samples_limit,
     scale,
-    use_ddim,
+    sample_fn,
     log_dir=None,
 ):
     opt = {
@@ -74,7 +74,7 @@ def get_mdm_loader(
         max_motion_length,
         num_samples_limit,
         scale,
-        use_ddim,
+        sample_fn,
         log_dir=log_dir,
     )
 

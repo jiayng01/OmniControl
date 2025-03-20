@@ -131,10 +131,18 @@ def main():
 
         # sample_fn = diffusion.p_sample_loop
 
-        print(f"Use DDIM: {args.use_ddim}")
-        sample_fn = (
-            diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
-        )
+        assert not (args.use_ddim and args.use_dpm_solver), "Choose one of the two"
+
+        if args.use_ddim:
+            print(f"Using DDIM with timestep respacing: {args.timestep_respacing}")
+            sample_fn = diffusion.ddim_sample_loop
+        elif args.use_dpm_solver:
+            print(f"Using DPM Solver with order: {args.dpm_solver_order}")
+            sample_fn = diffusion.dpm_solver_sample_loop
+        else:
+            print("Using default sampling method")
+            sample_fn = diffusion.p_sample_loop
+
         if args.use_ddim:
             out_path += f"_{args.timestep_respacing}"
 

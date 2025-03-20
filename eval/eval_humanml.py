@@ -472,16 +472,19 @@ if __name__ == "__main__":
     log_file += f"_density{args.density}"
     # log_file += '_cross_random'
 
+    assert not (args.use_ddim and args.use_dpm_solver), "Choose one of the two"
+
     if args.use_ddim:
-        print("Using DDIM")
         log_file += f"_{args.timestep_respacing}"
+    elif args.use_dpm_solver:
+        log_file += f"_dpm{args.dpm_solver_order}"
 
     log_file += ".log"
-    print(f"Will save to log file [{log_file}]")
+    print(f"Logging results to [{log_file}]")
 
     time_log_file = log_file.replace(".log", "_time.log")
     time_log_file = time_log_file.replace("eval_humanml", "times/eval_humanml")
-    print(f"Will save time to log file [{time_log_file}]")
+    print(f"Logging times to [{time_log_file}]")
 
     print(f"Eval mode [{args.eval_mode}]")
     if args.eval_mode == "omnicontrol":
@@ -534,6 +537,15 @@ if __name__ == "__main__":
     model.to(dist_util.dev())
     model.eval()  # disable random masking
 
+    # Select the correct sampler
+    sample_fn = diffusion.p_sample_loop  # Default to DDPM
+    if args.use_ddim:
+        sample_fn = diffusion.ddim_sample_loop
+        logger.log(f"Using DDIM (Timesteps: {args.timestep_respacing}) for inference.")
+    elif args.use_dpm_solver:
+        sample_fn = diffusion.dpm_solver_sample_loop
+        logger.log(f"Using DPM-Solver (Order: {args.dpm_solver_order}) for inference.")
+
     eval_motion_loaders = {
         ################
         ## HumanML3D Dataset##
@@ -547,8 +559,8 @@ if __name__ == "__main__":
             mm_num_repeats,
             gt_loader.dataset.opt.max_motion_length,
             num_samples_limit,
-            args.guidance_param,
-            args.use_ddim,
+            scale=args.guidance_param,
+            sample_fn=sample_fn,
             log_dir=time_log_file,
         )
     }

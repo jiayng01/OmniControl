@@ -5,7 +5,9 @@ model_path=$1
 # # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 2
 # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 5
 # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25
-python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 100
+# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 100
+python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 100 --use_dpm_solver True --dpm_solver_order 2
+
 # # eval left foot
 # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 10 --density 1
 # # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 10 --density 2

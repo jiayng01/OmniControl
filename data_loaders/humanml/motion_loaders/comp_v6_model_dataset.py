@@ -17,8 +17,8 @@ class CompMDMGeneratedDataset(Dataset):
         mm_num_repeats,
         max_motion_length,
         num_samples_limit,
+        sample_fn,
         scale=1.0,
-        use_ddim=False,
         log_dir=None,
     ):
         # log all prints to a file
@@ -36,11 +36,9 @@ class CompMDMGeneratedDataset(Dataset):
         # use_ddim = False  # FIXME - hardcoded
         clip_denoised = False  # FIXME - hardcoded
         self.max_motion_length = max_motion_length
-        sample_fn = (
-            diffusion.p_sample_loop if not use_ddim else diffusion.ddim_sample_loop
-        )
-        print(f"Use DDIM: {use_ddim}")
-        logging.info(f"Use DDIM: {use_ddim}")
+
+        print(f"Sampling: {sample_fn.__name__}")
+        logging.info(f"Sampling: {sample_fn.__name__}")
 
         real_num_batches = len(dataloader)
         if num_samples_limit is not None:
