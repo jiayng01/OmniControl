@@ -307,7 +307,7 @@ def add_generate_options(parser):
     group.add_argument(
         "--use_dpm_solver",
         default=False,
-        action="store_true",
+        type=bool,
         help="Use DPM-Solver instead of DDPM.",
     )
     group.add_argument(
