@@ -1028,7 +1028,6 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
             device=device,
             progress=progress,
-            **kwargs,
         ):
             final = sample
 
