@@ -295,6 +295,12 @@ def add_generate_options(parser):
         type=str,
         help="A text prompt to be generated. If empty, will take text prompts from dataset.",
     )
+    group.add_argument(
+        "--decompose_prompt",
+        default=False,
+        type=bool,
+        help="Enable LLM-based prompt decomposition",
+    )
     # DDIM
     group.add_argument(
         "--use_ddim",

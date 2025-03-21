@@ -20,6 +20,7 @@ import shutil
 from data_loaders.tensors import collate
 from utils.text_control_example import collate_all
 from os.path import join as pjoin
+from prompt.prompt_decomposer import PromptDecomposer, enrich_prompt_with_llm
 
 
 def main():
@@ -60,6 +61,10 @@ def main():
             texts = [args.text_prompt]
             args.num_samples = 1
             hint = None
+
+        if args.use_prompt_decomposer:
+            decomposer = PromptDecomposer()
+            texts = [decomposer.enrich_prompt(text) for text in texts]
 
     assert (
         args.num_samples <= args.batch_size
