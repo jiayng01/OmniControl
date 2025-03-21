@@ -62,7 +62,7 @@ def main():
             args.num_samples = 1
             hint = None
 
-        if args.use_prompt_decomposer:
+        if args.decompose_prompt:
             decomposer = PromptDecomposer()
             texts = [decomposer.enrich_prompt(text) for text in texts]
 

@@ -5,8 +5,8 @@ REPEATS=1
 COND_MODE_TEXT="only_text"
 COND_MODE_BOTH="text_and_spatial"
 DENSITY=49  # 25% of 196 frames
-TEXT_PROMPT="A person jumps forward and waves."
-TIMESTEP_RESPACING="ddim250"
+TEXT_PROMPT=""
+TIMESTEP_RESPACING="ddim500"
 
 # === TEXT-ONLY MODE ===
 echo "Running TEXT-ONLY without prompt decomposition..."
@@ -17,7 +17,7 @@ python -m sample.generate \
     --cond_mode $COND_MODE_TEXT \
     --timestep_respacing $TIMESTEP_RESPACING \
     --use_ddim True \
-    --output_dir ./results/text_only_no_decomp
+    --output_dir ./save/results/text_only_no_decomp
 
 echo "Running TEXT-ONLY with prompt decomposition..."
 python -m sample.generate \
@@ -26,9 +26,9 @@ python -m sample.generate \
     --text_prompt "$TEXT_PROMPT" \
     --cond_mode $COND_MODE_TEXT \
     --timestep_respacing $TIMESTEP_RESPACING \
-    --use_prompt_decomposer True \
+    --decompose_prompt True \
     --use_ddim True \
-    --output_dir ./results/text_only_with_decomp
+    --output_dir ./save/results/text_only_with_decomp
 
 
 # === TEXT + SPATIAL MODE (25%) ===
@@ -38,10 +38,9 @@ python -m sample.generate \
     --num_repetitions $REPEATS \
     --text_prompt "$TEXT_PROMPT" \
     --cond_mode $COND_MODE_BOTH \
-    --keyframe_density $DENSITY \
     --timestep_respacing $TIMESTEP_RESPACING \
     --use_ddim True \
-    --output_dir ./results/both_25_no_decomp
+    --output_dir ./save/results/both_25_no_decomp
 
 echo "Running TEXT + SPATIAL (25%) with prompt decomposition..."
 python -m sample.generate \
@@ -49,8 +48,7 @@ python -m sample.generate \
     --num_repetitions $REPEATS \
     --text_prompt "$TEXT_PROMPT" \
     --cond_mode $COND_MODE_BOTH \
-    --keyframe_density $DENSITY \
     --timestep_respacing $TIMESTEP_RESPACING \
-    --use_prompt_decomposer True\
+    --decompose_prompt True\
     --use_ddim True \
-    --output_dir ./results/both_25_with_decomp
+    --output_dir ./save/results/both_25_with_decomp
