@@ -144,3 +144,4 @@ submit.sh
 scripts_/
 save/
 huggingface.txt
+huggingface.env
