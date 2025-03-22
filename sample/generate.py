@@ -20,7 +20,7 @@ import shutil
 from data_loaders.tensors import collate
 from utils.text_control_example import collate_all
 from os.path import join as pjoin
-from prompt.prompt_decomposer import PromptDecomposer, enrich_prompt_with_llm
+from prompt.prompt_decomposer import PromptDecomposer
 
 
 def main():
