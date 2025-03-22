@@ -16,6 +16,7 @@ from copy import deepcopy
 from diffusion.nn import mean_flat, sum_flat
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
 from os.path import join as pjoin
+from utils.dpm_solver_pytorch import NoiseScheduleVP, model_wrapper, DPM_Solver
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps, scale_betas=1.0):
@@ -921,6 +922,84 @@ class GaussianDiffusion:
                 img = out["sample"]
 
     ## DPM-Solver
+
+    def dpm_solver_sample(
+        self,
+        model,
+        x,
+        t,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        const_noise=False,
+        solver_type="dpmsolver++",  # Added DPM-Solver specific params
+        solver_order=2,
+        skip_type="time_uniform",
+    ):
+        """
+        Sample using DPM-Solver's official implementation while maintaining DDPM interface.
+        """
+        # First get model predictions like DDPM/DDIM
+        out = self.p_mean_variance(
+            model,
+            x,
+            t,
+            clip_denoised=clip_denoised,
+            denoised_fn=denoised_fn,
+            model_kwargs=model_kwargs,
+        )
+
+        # Apply spatial guidance if needed
+        if "hint" in model_kwargs["y"].keys():
+            out["mean"] = self.guide(out["mean"], t, model_kwargs=model_kwargs)
+
+        # Set up DPM-Solver noise schedule
+        noise_schedule = NoiseScheduleVP(
+            schedule="discrete",
+            betas=self.betas,
+        )
+
+        # Create model wrapper that maintains compatibility with OmniControl's guidance
+        def model_fn(x, t):
+            # The model is already wrapped with ClassifierFreeSampleModel
+            # so we just need to convert continuous time to discrete steps
+            t_discrete = (t * self.num_timesteps).long()
+            model_out = model(x, self._scale_timesteps(t_discrete), **model_kwargs)
+            return self._predict_eps_from_xstart(x, t_discrete, model_out)
+
+        # Initialize DPM-Solver with the wrapped model
+        dpm_solver = DPM_Solver(
+            model_fn=model_fn,
+            noise_schedule=noise_schedule,
+            algorithm_type=solver_type,
+            correcting_x0_fn="dynamic thresholding",
+            # Don't need guidance_type since we use ClassifierFreeSampleModel
+        )
+
+        # Handle noise consistently with DDPM
+        if const_noise:
+            noise = th.randn_like(x[0])
+            noise = noise[None].repeat(x.shape[0], 1, 1, 1)
+        else:
+            noise = th.randn_like(x)
+
+        nonzero_mask = (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
+
+        # Use DPM-Solver's efficient stepping
+        sample = dpm_solver.step(
+            x,
+            t,
+            return_intermediate=False,
+            solver_type=solver_type,
+            order=solver_order,
+            skip_type=skip_type,
+        )
+
+        # Add noise like DDPM for final steps
+        sample = sample + nonzero_mask * noise * th.exp(0.5 * out["log_variance"])
+
+        return {"sample": sample, "pred_xstart": out["pred_xstart"]}
 
     ### END DPM-Solver ###
 
