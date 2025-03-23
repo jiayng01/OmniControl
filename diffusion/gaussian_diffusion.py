@@ -16,6 +16,7 @@ from copy import deepcopy
 from diffusion.nn import mean_flat, sum_flat
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
 from os.path import join as pjoin
+from utils.discrete_dpm_solver import DiscreteDPMSolver
 from utils.dpm_solver_pytorch import NoiseScheduleVP, model_wrapper, DPM_Solver
 
 
@@ -925,171 +926,83 @@ class GaussianDiffusion:
                 img = out["sample"]
 
     ## DPM-Solver
-    def dpm_solver_sample(
-        self,
-        model,
-        x,
-        t,
-        order=2,  # Default to second-order (Heun's method)
-        clip_denoised=True,
-        denoised_fn=None,
-        cond_fn=None,
-        model_kwargs=None,
-    ):
-        """
-        Perform a single step of DPM-Solver for diffusion sampling.
-
-        Implements equations from the DPM-Solver paper:
-            dx = f(x, t) dt + g(t) dW_t
-
-        Arguments:
-            model: The trained diffusion model.
-            x: The current sample at time t.
-            t: The current timestep.
-            order: Order of the solver (1, 2, or 3).
-            clip_denoised: Whether to clip the denoised output.
-            model_kwargs: Any extra inputs for the model.
-
-        Returns:
-            A dictionary containing:
-            - "sample": The next sample x_{t-1}.
-            - "pred_xstart": The predicted denoised x_0.
-        """
-        with torch.no_grad():
-            # Predict model noise
-            eps_t = model(x, t, **model_kwargs)
-
-            # Extract time-dependent coefficients
-            alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
-            alpha_bar_prev = _extract_into_tensor(self.alphas_cumprod_prev, t, x.shape)
-
-            if order == 1:
-                # First-order Euler method
-                x_prev = x - (alpha_bar_prev - alpha_bar) * eps_t
-            elif order == 2:
-                # Second-order Heun's method
-                t_mid = (t + alpha_bar_prev) / 2
-                x_mid = x - (alpha_bar_prev - alpha_bar) / 2 * eps_t
-                eps_mid = model(x_mid, t_mid, **model_kwargs)
-                x_prev = x - (alpha_bar_prev - alpha_bar) * eps_mid
-            else:
-                # Third-order multi-step method
-                t_mid = (t + alpha_bar_prev) / 2
-                x_mid = x - (alpha_bar_prev - alpha_bar) / 2 * eps_t
-                eps_mid = model(x_mid, t_mid, **model_kwargs)
-
-                x_next = x - (alpha_bar_prev - alpha_bar) * eps_mid
-                eps_next = model(x_next, t_mid, **model_kwargs)
-
-                x_prev = x - (alpha_bar_prev - alpha_bar) / 3 * (
-                    eps_t + 4 * eps_mid + eps_next
-                )
-
-            # Apply spatial guidance at the final step
-            if "hint" in model_kwargs["y"].keys():
-                x_prev = self.guide(x_prev, t, model_kwargs=model_kwargs)
-
-            return {"sample": x_prev, "pred_xstart": x - eps_t * torch.sqrt(alpha_bar)}
-
     def dpm_solver_sample_loop(
         self,
         model,
         shape,
         noise=None,
-        order=2,  # Use second-order solver by default
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
         device=None,
         progress=False,
+        skip_timesteps=0,
+        init_image=None,
+        randomize_class=False,
+        cond_fn_with_grad=False,
+        dump_steps=None,
+        const_noise=False,
+        steps=None,  # Number of DPM-Solver steps
         **kwargs,
     ):
         """
-        DPM-Solver Sampling Loop: Applies solver iteratively from T to 0.
-
-        Arguments:
-            model: The trained diffusion model.
-            shape: Output shape.
-            noise: Initial noise (None = sample from Gaussian).
-            order: The solver order (1, 2, or 3).
-            progress: Whether to show a progress bar.
-
-        Returns:
-            The final generated sample.
-        """
-        final = None
-
-        for sample in self.dpm_solver_sample_loop_progressive(
-            model,
-            shape,
-            noise=noise,
-            order=order,
-            clip_denoised=clip_denoised,
-            denoised_fn=denoised_fn,
-            cond_fn=cond_fn,
-            model_kwargs=model_kwargs,
-            device=device,
-            progress=progress,
-        ):
-            final = sample
-
-        return final["sample"]
-
-    def dpm_solver_sample_loop_progressive(
-        self,
-        model,
-        shape,
-        noise=None,
-        order=2,  # Default to second-order solver
-        clip_denoised=True,
-        denoised_fn=None,
-        cond_fn=None,
-        model_kwargs=None,
-        device=None,
-        progress=False,
-    ):
-        """
-        DPM-Solver Sampling with Progressive Outputs.
-
-        Arguments:
-            model: The trained diffusion model.
-            shape: Output shape.
-            noise: Initial noise (None = sample from Gaussian).
-            order: Order of solver (1, 2, or 3).
-            progress: Whether to show tqdm progress bar.
-
-        Yields:
-            Intermediate samples at each diffusion timestep.
+        Generate samples using the discrete DPM-Solver implementation.
+        Maintains compatibility with the existing diffusion framework while
+        providing the efficiency benefits of DPM-Solver.
         """
         if device is None:
             device = next(model.parameters()).device
 
-        img = noise if noise is not None else torch.randn(*shape, device=device)
+        # Use default step count if not specified
+        if steps is None:
+            steps = 5  # DPM-Solver usually works well with 20-30 steps
 
-        indices = list(range(self.num_timesteps))[::-1]
-        print(f"Indices: {indices}")
+        # Initialize starting noise
+        if noise is not None:
+            img = noise
+        else:
+            if const_noise:
+                img = torch.randn(*shape[1:], device=device)
+                img = img[None].repeat(shape[0], 1, 1, 1)
+            else:
+                img = torch.randn(*shape, device=device)
 
+        # Handle initialization with existing image
+        if skip_timesteps and init_image is None:
+            init_image = torch.zeros_like(img)
+
+        if init_image is not None:
+            init_timestep = self.num_timesteps - skip_timesteps - 1
+            t_init = torch.tensor([init_timestep] * shape[0], device=device)
+            img = self.q_sample(init_image, t_init, img)
+            steps -= skip_timesteps
+
+        # Initialize DPM-Solver
+        solver = DiscreteDPMSolver(
+            model=model,
+            noise_schedule=self,
+            order=kwargs.get("solver_order", 2),  # Default to second order
+        )
+
+        # Set up progress bar if requested
         if progress:
             from tqdm.auto import tqdm
 
-            indices = tqdm(indices)
+            progress = tqdm(total=steps)
 
-        for i in indices:
-            t = torch.tensor([i] * shape[0], device=device)
-            with torch.no_grad():
-                out = self.dpm_solver_sample(
-                    model,
-                    img,
-                    t,
-                    order=order,
-                    clip_denoised=clip_denoised,
-                    denoised_fn=denoised_fn,
-                    cond_fn=cond_fn,
-                    model_kwargs=model_kwargs,
-                )
-                yield out
-                img = out["sample"]
+        # Generate samples
+        with torch.no_grad():
+            sample = solver.sample(x=img, num_steps=steps, model_kwargs=model_kwargs)
+
+            if progress:
+                progress.update()
+
+            # Handle intermediate steps if requested
+            if dump_steps is not None:
+                return [sample]
+
+        return sample
 
     ### END DPM-Solver ###
 
