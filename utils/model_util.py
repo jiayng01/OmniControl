@@ -85,7 +85,7 @@ def create_gaussian_diffusion(args):
 
     print(f"steps:{steps}, timestep_respacing:{timestep_respacing}")
 
-    if args.use_dpm_solver:
+    if args.use_dpm:
         return gd.GaussianDiffusion(
             betas=betas,
             model_mean_type=(

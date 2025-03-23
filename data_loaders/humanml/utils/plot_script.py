@@ -115,10 +115,11 @@ def plot_3d_motion(
     data[..., 2] -= data[:, 0:1, 2]
 
     def update(index):
-        ax._lines = []
-        ax._collections = []
+        ax.clear()
+        # ax.lines = []
+        # ax.collections = []
         ax.view_init(elev=120, azim=-90)
-        ax._dist = 7.5
+        ax.dist = 7.5
         plot_xzPlane(
             MINS[0] - trajec[index, 0],
             MAXS[0] - trajec[index, 0],

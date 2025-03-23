@@ -472,12 +472,12 @@ if __name__ == "__main__":
     log_file += f"_density{args.density}"
     # log_file += '_cross_random'
 
-    assert not (args.use_ddim and args.use_dpm_solver), "Choose one of the two"
+    assert not (args.use_ddim and args.use_dpm), "Choose one of the two"
 
     if args.use_ddim:
         log_file += f"_{args.timestep_respacing}"
-    elif args.use_dpm_solver:
-        log_file += f"_dpm{args.dpm_solver_order}"
+    elif args.use_dpm:
+        log_file += f"_dpm{args.dpm_order}"
 
     log_file += ".log"
     print(f"Logging results to [{log_file}]")
@@ -542,9 +542,9 @@ if __name__ == "__main__":
     if args.use_ddim:
         sample_fn = diffusion.ddim_sample_loop
         logger.log(f"Using DDIM (Timesteps: {args.timestep_respacing}) for inference.")
-    elif args.use_dpm_solver:
+    elif args.use_dpm:
         sample_fn = diffusion.dpm_solver_sample_loop
-        logger.log(f"Using DPM-Solver (Order: {args.dpm_solver_order}) for inference.")
+        logger.log(f"Using DPM-Solver (Order: {args.dpm_order}) for inference.")
 
     eval_motion_loaders = {
         ################
@@ -562,7 +562,8 @@ if __name__ == "__main__":
             scale=args.guidance_param,
             sample_fn=sample_fn,
             log_dir=time_log_file,
-            dpm_steps=args.diffusion_steps,
+            dpm_steps=args.dpm_steps,
+            dpm_order=args.dpm_order,
         )
     }
 

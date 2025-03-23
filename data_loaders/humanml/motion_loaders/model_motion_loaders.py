@@ -59,7 +59,7 @@ def get_mdm_loader(
     scale,
     sample_fn,
     log_dir=None,
-    dpm_steps=1000,
+    **kwargs,
 ):
     opt = {
         "name": "test",  # FIXME
@@ -77,7 +77,8 @@ def get_mdm_loader(
         scale=scale,
         sample_fn=sample_fn,
         log_dir=log_dir,
-        dpm_steps=dpm_steps,
+        dpm_steps=kwargs["dpm_steps"],
+        dpm_order=kwargs["dpm_order"],
     )
 
     mm_dataset = MMGeneratedDataset(

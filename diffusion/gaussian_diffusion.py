@@ -13,11 +13,12 @@ import numpy as np
 import torch
 import torch as th
 from copy import deepcopy
+
+from tqdm import tqdm
 from diffusion.nn import mean_flat, sum_flat
 from data_loaders.humanml.scripts.motion_process import recover_from_ric
 from os.path import join as pjoin
-from utils.discrete_dpm_solver import DiscreteDPMSolver
-from utils.dpm_solver_pytorch import NoiseScheduleVP, model_wrapper, DPM_Solver
+from diffusers.schedulers import DPMSolverMultistepScheduler
 
 
 def get_named_beta_schedule(schedule_name, num_diffusion_timesteps, scale_betas=1.0):
@@ -727,7 +728,6 @@ class GaussianDiffusion:
 
         if progress:
             # Lazy import so that we don't depend on tqdm.
-            from tqdm.auto import tqdm
 
             indices = tqdm(indices)
 
@@ -905,8 +905,6 @@ class GaussianDiffusion:
             img = self.q_sample(init_image, my_t, img)
 
         if progress:
-            from tqdm.auto import tqdm
-
             indices = tqdm(indices)
 
         for i in indices:
@@ -940,69 +938,87 @@ class GaussianDiffusion:
         skip_timesteps=0,
         init_image=None,
         randomize_class=False,
-        cond_fn_with_grad=False,
-        dump_steps=None,
         const_noise=False,
-        steps=None,  # Number of DPM-Solver steps
+        steps=20,  # Number of DPM-Solver steps
+        order=2,
         **kwargs,
     ):
         """
-        Generate samples using the discrete DPM-Solver implementation.
-        Maintains compatibility with the existing diffusion framework while
-        providing the efficiency benefits of DPM-Solver.
+        Generate samples using diffusers' DPMSolverMultistepScheduler.
+        This implementation maintains compatibility with OmniControl while leveraging
+        the robust implementation from diffusers.
         """
         if device is None:
             device = next(model.parameters()).device
 
-        # Use default step count if not specified
-        if steps is None:
-            steps = 5  # DPM-Solver usually works well with 20-30 steps
+        # Initialize DPM-Solver from diffusers
+        scheduler = DPMSolverMultistepScheduler(
+            num_train_timesteps=1000,
+            beta_start=self.betas[0].item(),
+            beta_end=self.betas[-1].item(),
+            beta_schedule="squaredcos_cap_v2",  # cosine schedule
+            solver_order=order,
+            prediction_type="sample",
+            algorithm_type="dpmsolver++",  # Use DPM-Solver++ for better quality
+        )
 
-        # Initialize starting noise
+        # Set timesteps for inference
+        scheduler.set_timesteps(steps)
+        # expand shape to match batch size
+        timesteps = [
+            torch.tensor([t] * shape[0], device=device).long()
+            for t in scheduler.timesteps
+        ]
+
+        # Initialize noise
         if noise is not None:
-            img = noise
+            x_t = noise
         else:
             if const_noise:
-                img = torch.randn(*shape[1:], device=device)
-                img = img[None].repeat(shape[0], 1, 1, 1)
+                x_t = torch.randn(*shape[1:], device=device)
+                x_t = x_t[None].repeat(shape[0], 1, 1, 1)
             else:
-                img = torch.randn(*shape, device=device)
+                x_t = torch.randn(shape, device=device)
 
-        # Handle initialization with existing image
         if skip_timesteps and init_image is None:
-            init_image = torch.zeros_like(img)
+            init_image = torch.zeros_like(x_t)
 
         if init_image is not None:
             init_timestep = self.num_timesteps - skip_timesteps - 1
             t_init = torch.tensor([init_timestep] * shape[0], device=device)
-            img = self.q_sample(init_image, t_init, img)
-            steps -= skip_timesteps
+            x_t = self.q_sample(init_image, t_init, x_t)
 
-        # Initialize DPM-Solver
-        solver = DiscreteDPMSolver(
-            model=model,
-            noise_schedule=self,
-            order=kwargs.get("solver_order", 2),  # Default to second order
-        )
-
-        # Set up progress bar if requested
         if progress:
-            from tqdm.auto import tqdm
+            timesteps = tqdm(timesteps)
 
-            progress = tqdm(total=steps)
+        # Main sampling loop
+        for t in timesteps:
+            # Get model prediction
+            with torch.no_grad():
+                out = self.p_mean_variance(
+                    model,
+                    x_t,
+                    t,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    model_kwargs=model_kwargs,
+                )
 
-        # Generate samples
-        with torch.no_grad():
-            sample = solver.sample(x=img, num_steps=steps, model_kwargs=model_kwargs)
+            # DPM-Solver update step
+            scheduler_output = scheduler.step(
+                model_output=out["pred_xstart"],
+                timestep=t[0],
+                sample=x_t,
+            )
+            x_t = scheduler_output.prev_sample
 
-            if progress:
-                progress.update()
+            # Spatial guidance
+            if model_kwargs is not None and "y" in model_kwargs:
+                if "hint" in model_kwargs["y"]:
+                    x_t = self.guide(x_t, t, model_kwargs)
 
-            # Handle intermediate steps if requested
-            if dump_steps is not None:
-                return [sample]
-
-        return sample
+        # Return final sample directly instead of yielding
+        return x_t
 
     ### END DPM-Solver ###
 

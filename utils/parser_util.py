@@ -311,13 +311,13 @@ def add_generate_options(parser):
 
     # DPM-Solver
     group.add_argument(
-        "--use_dpm_solver",
+        "--use_dpm",
         default=False,
         type=bool,
         help="Use DPM-Solver instead of DDPM.",
     )
     group.add_argument(
-        "--dpm_solver_order",
+        "--dpm_order",
         default=2,
         type=int,
         choices=[1, 2, 3],
@@ -325,7 +325,7 @@ def add_generate_options(parser):
     )
     group.add_argument(
         "--dpm_steps",
-        default=50,
+        default=20,
         type=int,
         help="Number of steps for the DPM-Solver.",
     )
