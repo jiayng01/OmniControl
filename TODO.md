@@ -9,3 +9,4 @@ python -m train.train_mdm --save_dir save/my_omnicontrol --dataset humanml --num
 - convert the text into prompts broken down
 
 - limitations: prompt (if improves) does not cover spatial_only case
+- max_text_len = 20

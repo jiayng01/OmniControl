@@ -922,7 +922,6 @@ class GaussianDiffusion:
                 img = out["sample"]
 
     ## DPM-Solver
-
     def dpm_solver_sample(
         self,
         model,
@@ -933,14 +932,12 @@ class GaussianDiffusion:
         cond_fn=None,
         model_kwargs=None,
         const_noise=False,
-        solver_type="dpmsolver++",  # Added DPM-Solver specific params
-        solver_order=2,
-        skip_type="time_uniform",
     ):
         """
-        Sample using DPM-Solver's official implementation while maintaining DDPM interface.
+        A single DPM-Solver sampling step. This maintains the same interface as p_sample,
+        but uses DPM-Solver's numerical methods for better convergence.
         """
-        # First get model predictions like DDPM/DDIM
+        # Get model predictions - ClassifierFreeSampleModel handles CFG
         out = self.p_mean_variance(
             model,
             x,
@@ -950,56 +947,154 @@ class GaussianDiffusion:
             model_kwargs=model_kwargs,
         )
 
-        # Apply spatial guidance if needed
+        # Apply spatial guidance like in regular DDPM
         if "hint" in model_kwargs["y"].keys():
             out["mean"] = self.guide(out["mean"], t, model_kwargs=model_kwargs)
 
-        # Set up DPM-Solver noise schedule
-        noise_schedule = NoiseScheduleVP(
-            schedule="discrete",
-            betas=self.betas,
-        )
+        # Set up DPM-Solver's noise schedule
+        noise_schedule = NoiseScheduleVP(schedule="discrete", betas=self.betas)
 
-        # Create model wrapper that maintains compatibility with OmniControl's guidance
-        def model_fn(x, t):
-            # The model is already wrapped with ClassifierFreeSampleModel
-            # so we just need to convert continuous time to discrete steps
-            t_discrete = (t * self.num_timesteps).long()
-            model_out = model(x, self._scale_timesteps(t_discrete), **model_kwargs)
-            return self._predict_eps_from_xstart(x, t_discrete, model_out)
-
-        # Initialize DPM-Solver with the wrapped model
-        dpm_solver = DPM_Solver(
-            model_fn=model_fn,
+        wrapped_model = model_wrapper(
+            model=model,
             noise_schedule=noise_schedule,
-            algorithm_type=solver_type,
+            model_type="x_start",
+        )
+
+        # Create DPM-Solver instance - no need for guidance_type since CFG is handled by wrapper
+        dpm_solver = DPM_Solver(
+            model_fn=lambda x, t: self._predict_eps_from_xstart(
+                x, t, out["pred_xstart"]
+            ),
+            noise_schedule=noise_schedule,
+            algorithm_type="dpmsolver++",
             correcting_x0_fn="dynamic thresholding",
-            # Don't need guidance_type since we use ClassifierFreeSampleModel
         )
 
-        # Handle noise consistently with DDPM
-        if const_noise:
-            noise = th.randn_like(x[0])
-            noise = noise[None].repeat(x.shape[0], 1, 1, 1)
-        else:
-            noise = th.randn_like(x)
-
-        nonzero_mask = (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
-
-        # Use DPM-Solver's efficient stepping
-        sample = dpm_solver.step(
-            x,
-            t,
-            return_intermediate=False,
-            solver_type=solver_type,
-            order=solver_order,
-            skip_type=skip_type,
-        )
-
-        # Add noise like DDPM for final steps
-        sample = sample + nonzero_mask * noise * th.exp(0.5 * out["log_variance"])
+        # Apply DPM-Solver step
+        sample = dpm_solver.sample(x, t, return_intermediate=False)
 
         return {"sample": sample, "pred_xstart": out["pred_xstart"]}
+
+    def dpm_solver_sample_loop(
+        self,
+        model,
+        shape,
+        noise=None,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        device=None,
+        progress=False,
+        skip_timesteps=0,
+        init_image=None,
+        randomize_class=False,
+        cond_fn_with_grad=False,
+        dump_steps=None,
+        const_noise=False,
+    ):
+        """
+        Main sampling loop using DPM-Solver. Maintains same interface as p_sample_loop.
+        """
+        final = None
+        if dump_steps is not None:
+            dump = []
+
+        for i, sample in enumerate(
+            self.dpm_solver_sample_loop_progressive(
+                model,
+                shape,
+                noise=noise,
+                clip_denoised=clip_denoised,
+                denoised_fn=denoised_fn,
+                cond_fn=cond_fn,
+                model_kwargs=model_kwargs,
+                device=device,
+                progress=progress,
+                skip_timesteps=skip_timesteps,
+                init_image=init_image,
+                randomize_class=randomize_class,
+                const_noise=const_noise,
+            )
+        ):
+            if dump_steps is not None and i in dump_steps:
+                dump.append(deepcopy(sample["sample"]))
+            final = sample
+
+        if dump_steps is not None:
+            return dump
+        return final["sample"]
+
+    def dpm_solver_sample_loop_progressive(
+        self,
+        model,
+        shape,
+        noise=None,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        device=None,
+        progress=False,
+        skip_timesteps=0,
+        init_image=None,
+        randomize_class=False,
+        const_noise=False,
+    ):
+        """
+        Progressive version of DPM-Solver sampling that yields intermediate results.
+        Maintains same interface as p_sample_loop_progressive.
+        """
+        if device is None:
+            device = next(model.parameters()).device
+
+        # Initialize noise like in DDPM
+        if noise is not None:
+            img = noise
+        else:
+            if const_noise:
+                img = th.randn(*shape[1:], device=device)
+                img = img[None].repeat(shape[0], 1, 1, 1)
+            else:
+                img = th.randn(*shape, device=device)
+
+        if skip_timesteps and init_image is None:
+            init_image = th.zeros_like(img)
+
+        indices = list(range(self.num_timesteps - skip_timesteps))[::-1]
+
+        if init_image is not None:
+            print("Using init_image")
+            my_t = th.ones([shape[0]], device=device, dtype=th.long) * indices[0]
+            img = self.q_sample(init_image, my_t, img)
+
+        if progress:
+            from tqdm.auto import tqdm
+
+            indices = tqdm(indices)
+
+        for i in indices:
+            t = th.tensor([i] * shape[0], device=device)
+            if randomize_class and "y" in model_kwargs:
+                model_kwargs["y"] = th.randint(
+                    low=0,
+                    high=model.num_classes,
+                    size=model_kwargs["y"].shape,
+                    device=model_kwargs["y"].device,
+                )
+            with th.no_grad():
+                out = self.dpm_solver_sample(
+                    model,
+                    img,
+                    t,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    cond_fn=cond_fn,
+                    model_kwargs=model_kwargs,
+                    const_noise=const_noise,
+                )
+                yield out
+                img = out["sample"]
 
     ### END DPM-Solver ###
 
