@@ -323,6 +323,12 @@ def add_generate_options(parser):
         choices=[1, 2, 3],
         help="Order of the DPM-Solver (1, 2, or 3).",
     )
+    group.add_argument(
+        "--dpm_steps",
+        default=50,
+        type=int,
+        help="Number of steps for the DPM-Solver.",
+    )
 
 
 def add_edit_options(parser):
