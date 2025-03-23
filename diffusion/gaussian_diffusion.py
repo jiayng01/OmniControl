@@ -788,7 +788,6 @@ class GaussianDiffusion:
             - "pred_xstart": The predicted clean image.
         """
 
-        print(f"t: {t}")
         out = self.p_mean_variance(
             model,
             x,
