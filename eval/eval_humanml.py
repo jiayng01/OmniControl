@@ -562,6 +562,7 @@ if __name__ == "__main__":
             scale=args.guidance_param,
             sample_fn=sample_fn,
             log_dir=time_log_file,
+            dpm_steps=args.diffusion_steps,
         )
     }
 

@@ -20,6 +20,7 @@ class CompMDMGeneratedDataset(Dataset):
         sample_fn,
         scale=1.0,
         log_dir=None,
+        dpm_steps=1000,
     ):
         # log all prints to a file
         if log_dir is not None:
@@ -109,7 +110,8 @@ class CompMDMGeneratedDataset(Dataset):
                         dump_steps=None,
                         noise=None,
                         const_noise=False,
-                        # when experimenting guidance_scale we want to nutrileze the effect of noise on generation
+                        # when experimenting guidance_scale we want to nutrileze the effect of noise on generation,
+                        steps=dpm_steps,  # for DPM-Solver only
                     )
 
                     rep_infer_time = time.time() - rep_infer_start

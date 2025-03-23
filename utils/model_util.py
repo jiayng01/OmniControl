@@ -85,6 +85,31 @@ def create_gaussian_diffusion(args):
 
     print(f"steps:{steps}, timestep_respacing:{timestep_respacing}")
 
+    if args.use_dpm_solver:
+        return gd.GaussianDiffusion(
+            betas=betas,
+            model_mean_type=(
+                gd.ModelMeanType.EPSILON
+                if not predict_xstart
+                else gd.ModelMeanType.START_X
+            ),
+            model_var_type=(
+                (
+                    gd.ModelVarType.FIXED_LARGE
+                    if not args.sigma_small
+                    else gd.ModelVarType.FIXED_SMALL
+                )
+                if not learn_sigma
+                else gd.ModelVarType.LEARNED_RANGE
+            ),
+            loss_type=loss_type,
+            rescale_timesteps=rescale_timesteps,
+            lambda_vel=args.lambda_vel,
+            lambda_rcxyz=args.lambda_rcxyz,
+            lambda_fc=args.lambda_fc,
+            dataset=args.dataset,
+        )
+
     return SpacedDiffusion(
         use_timesteps=space_timesteps(steps, timestep_respacing),
         betas=betas,
