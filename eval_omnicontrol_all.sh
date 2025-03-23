@@ -5,7 +5,7 @@ model_path=$1
 # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 5 --diffusion_steps 500
 # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --diffusion_steps 500
 # python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 100 --diffusion_steps 500
-python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_ddim True --timestep_respacing ddim20
+# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_ddim True --timestep_respacing ddim20
 python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 5 --use_ddim True --timestep_respacing ddim20
 python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_ddim True --timestep_respacing ddim20
 python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 100 --use_ddim True --timestep_respacing ddim20
