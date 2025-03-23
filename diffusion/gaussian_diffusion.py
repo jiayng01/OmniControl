@@ -929,150 +929,111 @@ class GaussianDiffusion:
         self,
         model,
         x,
-        t=None,
+        t,
+        order=2,  # Default to second-order (Heun's method)
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
-        const_noise=False,
-        steps=1000,
-        device=None,
     ):
         """
-        A single DPM-Solver sampling step. This maintains the same interface as p_sample,
-        but uses DPM-Solver's numerical methods for better convergence.
+        Perform a single step of DPM-Solver for diffusion sampling.
+
+        Implements equations from the DPM-Solver paper:
+            dx = f(x, t) dt + g(t) dW_t
+
+        Arguments:
+            model: The trained diffusion model.
+            x: The current sample at time t.
+            t: The current timestep.
+            order: Order of the solver (1, 2, or 3).
+            clip_denoised: Whether to clip the denoised output.
+            model_kwargs: Any extra inputs for the model.
+
+        Returns:
+            A dictionary containing:
+            - "sample": The next sample x_{t-1}.
+            - "pred_xstart": The predicted denoised x_0.
         """
-        # Set up DPM-Solver's noise schedule
-        betas = torch.tensor(self.betas, dtype=torch.float32, device=device)
-        noise_schedule = NoiseScheduleVP(schedule="discrete", betas=betas)
+        with torch.no_grad():
+            # Predict model noise
+            eps_t = model(x, t, **model_kwargs)
 
-        def model_fn(x, t, **model_kwargs):
-            """Wrapper to make OmniControl's model compatible with DPM-Solver"""
-            # t = next(self.t_tensors)
+            # Extract time-dependent coefficients
+            alpha_bar = _extract_into_tensor(self.alphas_cumprod, t, x.shape)
+            alpha_bar_prev = _extract_into_tensor(self.alphas_cumprod_prev, t, x.shape)
 
-            # Convert timesteps to match OmniControl's format
-            # print(f"t before: {t}")
-            # print(f"num_timesteps: {self.num_timesteps}")
-            # t = t / 1000.0 + (1.0 / self.num_timesteps)
-            # t = (t * (self.num_timesteps - 1)).round().long()
-            # print(f"t after: {t}")
+            if order == 1:
+                # First-order Euler method
+                x_prev = x - (alpha_bar_prev - alpha_bar) * eps_t
+            elif order == 2:
+                # Second-order Heun's method
+                t_mid = (t + alpha_bar_prev) / 2
+                x_mid = x - (alpha_bar_prev - alpha_bar) / 2 * eps_t
+                eps_mid = model(x_mid, t_mid, **model_kwargs)
+                x_prev = x - (alpha_bar_prev - alpha_bar) * eps_mid
+            else:
+                # Third-order multi-step method
+                t_mid = (t + alpha_bar_prev) / 2
+                x_mid = x - (alpha_bar_prev - alpha_bar) / 2 * eps_t
+                eps_mid = model(x_mid, t_mid, **model_kwargs)
 
-            print(x.shape)
-            print(x)
-            print(t)
-            t = (t * (self.num_timesteps - 1)).round().long()
-            return
+                x_next = x - (alpha_bar_prev - alpha_bar) * eps_mid
+                eps_next = model(x_next, t_mid, **model_kwargs)
 
-            # Get model prediction
-            out = self.p_mean_variance(
-                model,
-                x,
-                t,
-                clip_denoised=clip_denoised,
-                denoised_fn=denoised_fn,
-                model_kwargs=model_kwargs,
-            )
+                x_prev = x - (alpha_bar_prev - alpha_bar) / 3 * (
+                    eps_t + 4 * eps_mid + eps_next
+                )
 
-            # Apply spatial guidance if needed
+            # Apply spatial guidance at the final step
             if "hint" in model_kwargs["y"].keys():
-                out["mean"] = self.guide(out["mean"], t, model_kwargs=model_kwargs)
+                x_prev = self.guide(x_prev, t, model_kwargs=model_kwargs)
 
-            return out["mean"]
-
-        wrapped_model = model_wrapper(
-            model=model_fn,
-            noise_schedule=noise_schedule,
-            model_type="x_start",
-            model_kwargs=model_kwargs,
-        )
-
-        # Create DPM-Solver instance - no need for guidance_type since CFG is handled by wrapper
-        dpm_solver = DPM_Solver(
-            model_fn=wrapped_model,
-            noise_schedule=noise_schedule,
-            algorithm_type="dpmsolver++",
-            # correcting_x0_fn="dynamic thresholding",
-        )
-
-        # Apply DPM-Solver step
-        sample = dpm_solver.sample(
-            x,
-            steps=steps,
-            skip_type="time_uniform",
-            # order=self.args.dpm_solver_order,
-            # method=self.args.dpm_solver_method,
-            # solver_type=self.args.dpm_solver_type,
-        )
-
-        return sample
+            return {"sample": x_prev, "pred_xstart": x - eps_t * torch.sqrt(alpha_bar)}
 
     def dpm_solver_sample_loop(
         self,
         model,
         shape,
         noise=None,
+        order=2,  # Use second-order solver by default
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
         device=None,
         progress=False,
-        skip_timesteps=0,
-        init_image=None,
-        randomize_class=False,
-        cond_fn_with_grad=False,
-        dump_steps=None,
-        const_noise=False,
-        steps=1000,
+        **kwargs,
     ):
         """
-        Main sampling loop using DPM-Solver. Maintains same interface as p_sample_loop.
-        """
+        DPM-Solver Sampling Loop: Applies solver iteratively from T to 0.
 
-        return self.dpm_solver_sample_loop_progressive(
+        Arguments:
+            model: The trained diffusion model.
+            shape: Output shape.
+            noise: Initial noise (None = sample from Gaussian).
+            order: The solver order (1, 2, or 3).
+            progress: Whether to show a progress bar.
+
+        Returns:
+            The final generated sample.
+        """
+        final = None
+
+        for sample in self.dpm_solver_sample_loop_progressive(
             model,
             shape,
             noise=noise,
+            order=order,
             clip_denoised=clip_denoised,
             denoised_fn=denoised_fn,
             cond_fn=cond_fn,
             model_kwargs=model_kwargs,
             device=device,
             progress=progress,
-            skip_timesteps=skip_timesteps,
-            init_image=init_image,
-            randomize_class=randomize_class,
-            const_noise=const_noise,
-            steps=steps,
-        )
-        final = None
-        if dump_steps is not None:
-            dump = []
-
-        for i, sample in enumerate(
-            self.dpm_solver_sample_loop_progressive(
-                model,
-                shape,
-                noise=noise,
-                clip_denoised=clip_denoised,
-                denoised_fn=denoised_fn,
-                cond_fn=cond_fn,
-                model_kwargs=model_kwargs,
-                device=device,
-                progress=progress,
-                skip_timesteps=skip_timesteps,
-                init_image=init_image,
-                randomize_class=randomize_class,
-                const_noise=const_noise,
-                steps=steps,
-            )
         ):
-            if dump_steps is not None and i in dump_steps:
-                dump.append(deepcopy(sample["sample"]))
             final = sample
 
-        if dump_steps is not None:
-            return dump
         return final["sample"]
 
     def dpm_solver_sample_loop_progressive(
@@ -1080,80 +1041,55 @@ class GaussianDiffusion:
         model,
         shape,
         noise=None,
+        order=2,  # Default to second-order solver
         clip_denoised=True,
         denoised_fn=None,
         cond_fn=None,
         model_kwargs=None,
         device=None,
         progress=False,
-        skip_timesteps=0,
-        init_image=None,
-        randomize_class=False,
-        const_noise=False,
-        steps=1000,
     ):
         """
-        Progressive version of DPM-Solver sampling that yields intermediate results.
-        Maintains same interface as p_sample_loop_progressive.
+        DPM-Solver Sampling with Progressive Outputs.
+
+        Arguments:
+            model: The trained diffusion model.
+            shape: Output shape.
+            noise: Initial noise (None = sample from Gaussian).
+            order: Order of solver (1, 2, or 3).
+            progress: Whether to show tqdm progress bar.
+
+        Yields:
+            Intermediate samples at each diffusion timestep.
         """
         if device is None:
             device = next(model.parameters()).device
 
-        # Initialize noise like in DDPM
-        if noise is not None:
-            img = noise
-        else:
-            if const_noise:
-                img = th.randn(*shape[1:], device=device)
-                img = img[None].repeat(shape[0], 1, 1, 1)
-            else:
-                img = th.randn(*shape, device=device)
+        img = noise if noise is not None else torch.randn(*shape, device=device)
 
-        if skip_timesteps and init_image is None:
-            init_image = th.zeros_like(img)
-
-        indices = list(range(self.num_timesteps - skip_timesteps))[::-1]
-
-        if init_image is not None:
-            print("Using init_image")
-            my_t = th.ones([shape[0]], device=device, dtype=th.long) * indices[0]
-            img = self.q_sample(init_image, my_t, img)
+        indices = list(range(self.num_timesteps))[::-1]
+        print(f"Indices: {indices}")
 
         if progress:
             from tqdm.auto import tqdm
 
             indices = tqdm(indices)
 
-        # self.t_tensors = []
-        # for i in indices:
-        #     t = th.tensor([i] * shape[0], device=device)
-        #     print(f"t in prog: {t}")
-        #     self.t_tensors.append(t)
-        # self.t_tensors = iter(self.t_tensors)
-
-        if randomize_class and "y" in model_kwargs:
-            model_kwargs["y"] = th.randint(
-                low=0,
-                high=model.num_classes,
-                size=model_kwargs["y"].shape,
-                device=model_kwargs["y"].device,
-            )
-        with th.no_grad():
-            out = self.dpm_solver_sample(
-                model,
-                img,
-                # t,
-                clip_denoised=clip_denoised,
-                denoised_fn=denoised_fn,
-                cond_fn=cond_fn,
-                model_kwargs=model_kwargs,
-                const_noise=const_noise,
-                steps=steps,
-                device=device,
-            )
-            # yield out
-            # img = out["sample"]
-            return out
+        for i in indices:
+            t = torch.tensor([i] * shape[0], device=device)
+            with torch.no_grad():
+                out = self.dpm_solver_sample(
+                    model,
+                    img,
+                    t,
+                    order=order,
+                    clip_denoised=clip_denoised,
+                    denoised_fn=denoised_fn,
+                    cond_fn=cond_fn,
+                    model_kwargs=model_kwargs,
+                )
+                yield out
+                img = out["sample"]
 
     ### END DPM-Solver ###
 
