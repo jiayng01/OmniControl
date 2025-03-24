@@ -11,7 +11,6 @@ def parse_and_load_from_model(parser):
     add_model_options(parser)
     add_diffusion_options(parser)
     args = parser.parse_args()
-    print("arg")
     args_to_overwrite = []
     for group_name in ["dataset", "model", "diffusion"]:
         args_to_overwrite += get_args_per_group_name(parser, args, group_name)

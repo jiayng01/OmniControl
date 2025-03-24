@@ -58,6 +58,10 @@ RAW_STD_PATH = "./dataset/humanml_spatial_norm/Std_raw.npy"
 
 MODEL_PATH = "./save/omnicontrol_ckpt/model_humanml3d.pt"
 
+MIN_COORD = -1.0
+MAX_COORD = 1.0
+ORIGIN_COORD = 0.0
+
 
 def create_gradient_color(base_color, factor):
     """Lighten base_color by factor (0 = dark, 1 = white)."""
@@ -73,18 +77,21 @@ def create_gradient_color(base_color, factor):
 
 def create_advanced_3d_plot(current_x, current_y, current_z, constraints, total_frames):
     fig = go.Figure()
-    # Plot the current unsaved point as a black marker.
+
+    # Plot the current unsaved point as a black marker
+    # IMPORTANT: Swap Y and Z for visualization
     fig.add_trace(
         go.Scatter3d(
             x=[current_x],
-            y=[current_y],
-            z=[current_z],
+            y=[current_z],  # Use Z as Y in visualization
+            z=[current_y],  # Use Y as Z in visualization
             mode="markers",
             marker=dict(size=10, color="black"),
             name="Current Point",
         )
     )
-    # Plot stored constraints with gradient colors.
+
+    # Plot stored constraints with gradient colors
     if constraints:
         groups = {}
         for frame, x, y, z, joint_id, joint_name in constraints:
@@ -97,8 +104,8 @@ def create_advanced_3d_plot(current_x, current_y, current_z, constraints, total_
                 factor = min(max(frame / total_frames, 0), 1)
                 colors.append(create_gradient_color(base_color, factor))
                 xs.append(x)
-                ys.append(y)
-                zs.append(z)
+                ys.append(z)  # Use Z as Y in visualization
+                zs.append(y)  # Use Y as Z in visualization
             fig.add_trace(
                 go.Scatter3d(
                     x=xs,
@@ -109,15 +116,71 @@ def create_advanced_3d_plot(current_x, current_y, current_z, constraints, total_
                     name=f"Constraint: {joint}",
                 )
             )
+
+    # Add a ground plane at Y=0 (which is Z=0 in visualization)
+    x_grid, y_grid = np.meshgrid(np.linspace(-5, 5, 10), np.linspace(-5, 5, 10))
+    z_grid = np.zeros_like(x_grid)
+
+    fig.add_trace(
+        go.Surface(
+            x=x_grid,
+            y=y_grid,
+            z=z_grid,
+            colorscale=[[0, "rgba(200,200,200,0.3)"], [1, "rgba(200,200,200,0.3)"]],
+            showscale=False,
+            name="Ground Plane",
+        )
+    )
+
+    # Add coordinate system axes
+    # X-axis (red)
+    fig.add_trace(
+        go.Scatter3d(
+            x=[0, 1],
+            y=[0, 0],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="red", width=4),
+            name="X-axis (Left/Right)",
+        )
+    )
+    # Z-axis as Y-axis in visualization (green)
+    fig.add_trace(
+        go.Scatter3d(
+            x=[0, 0],
+            y=[0, 0],
+            z=[0, 1],
+            mode="lines",
+            line=dict(color="green", width=4),
+            name="Y-axis (Height)",
+        )
+    )
+    # Y-axis as Z-axis in visualization (blue)
+    fig.add_trace(
+        go.Scatter3d(
+            x=[0, 0],
+            y=[1, 0],
+            z=[0, 0],
+            mode="lines",
+            line=dict(color="blue", width=4),
+            name="Z-axis (Forward/Backward)",
+        )
+    )
+
+    # Update layout with clear axis labels
     fig.update_layout(
         scene=dict(
-            xaxis=dict(range=[-5, 5], title="X"),
-            yaxis=dict(range=[-5, 5], title="Y"),
-            zaxis=dict(range=[-5, 5], title="Z"),
+            xaxis=dict(range=[MIN_COORD, MAX_COORD], title="X (Left/Right)"),
+            yaxis=dict(range=[MIN_COORD, MAX_COORD], title="Z (Forward/Backward)"),
+            zaxis=dict(range=[MIN_COORD, MAX_COORD], title="Y (Height)"),
         ),
-        title="3D Visualization of Constraints",
+        title="3D Visualization of Constraints (Y is height, Z is forward/backward)",
         height=500,
+        scene_camera=dict(
+            eye=dict(x=1.5, y=-1.5, z=1.5)  # Adjust camera position for better view
+        ),
     )
+
     return fig
 
 
@@ -273,9 +336,9 @@ def run_generation(args, processed_hint):
     is_using_data = not any([args.text_prompt])
     dist_util.setup_dist(args.device)
     if out_path == "demo":
-        out_path = os.path.join(
-            os.path.dirname("./save/demo"), f"samples_seed{args.seed}"
-        )
+        demo_dir = "./save/demo"
+        os.makedirs(demo_dir, exist_ok=True)
+        out_path = os.path.join(demo_dir, f"samples_seed{args.seed}")
     else:
         raise ValueError("Invalid output directory for demo.")
 
@@ -291,9 +354,9 @@ def run_generation(args, processed_hint):
         else:
             texts = [args.text_prompt]
             args.num_samples = 1
-            print(processed_hint.shape)
-            hints = np.concatenate([processed_hint], axis=0)
-            print(hints.shape)
+            # print(processed_hint.shape)
+            hints = processed_hint
+            # print(hints.shape)
 
     assert (
         args.num_samples <= args.batch_size
@@ -384,9 +447,9 @@ def run_generation(args, processed_hint):
         st.write(f"Batch inference time: {batch_infer_time:.3f} seconds")
         rep_infer_times = [batch_infer_time / args.batch_size]
 
-        sample = sample[:, :263]  # for HumanML3D, D = 263
+        sample = sample[:, :263]
         if model.data_rep == "hml_vec":
-            n_joints = 22 if sample.shape[0] == 263 else 21
+            n_joints = 22 if sample.shape[1] == 263 else 21
             sample = data.dataset.t2m_dataset.inv_transform(
                 sample.cpu().permute(0, 2, 3, 1)
             ).float()
@@ -575,7 +638,7 @@ with col3:
         "Sampler", options=["DDPM", "DDIM", "DPM Order 2", "DPM Order 3"]
     )
 with col4:
-    steps_ui = st.number_input("Steps", min_value=1, value=20, step=1)
+    steps_ui = st.number_input("Steps", min_value=50, value=250, step=1)
 
 
 st.markdown("### Spatial Constraints")
@@ -588,11 +651,11 @@ with col2:
 # Place x/y/z sliders in a single row.
 col1, col2, col3 = st.columns(3)
 with col1:
-    x_coord = st.slider("X", -5.0, 5.0, 0.0, step=0.1)
+    x_coord = st.slider("X", MIN_COORD, MAX_COORD, ORIGIN_COORD, step=0.1)
 with col2:
-    y_coord = st.slider("Y", -5.0, 5.0, 0.0, step=0.1)
+    y_coord = st.slider("Y", MIN_COORD, MAX_COORD, ORIGIN_COORD, step=0.1)
 with col3:
-    z_coord = st.slider("Z", -5.0, 5.0, 0.0, step=0.1)
+    z_coord = st.slider("Z", MIN_COORD, MAX_COORD, ORIGIN_COORD, step=0.1)
 
 if "constraints" not in st.session_state:
     st.session_state.constraints = []
@@ -636,7 +699,6 @@ if st.session_state.constraints:
         with col2:
             if st.button("Remove", key=f"remove_{idx}"):
                 st.session_state.constraints.pop(idx)
-                st.experimental_rerun()
 else:
     st.write("No constraints yet.")
 

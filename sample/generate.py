@@ -43,11 +43,6 @@ def main():
         if args.text_prompt != "":
             out_path += "_" + args.text_prompt.replace(" ", "_").replace(".", "")
 
-    if out_path == "demo":
-        out_path = os.path.join(
-            os.path.dirname("./save/demo"),
-            f"samples_seed{args.seed}",
-        )
     hints = None
     # this block must be called BEFORE the dataset is loaded
     if args.text_prompt != "":

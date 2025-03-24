@@ -1,16 +1,16 @@
 #!/bin/sh
 model_path=$1
 # eval root joint
-python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_dpm True --dpm_order 2 --dpm_steps 75
-python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 5 --use_dpm True --dpm_order 2 --dpm_steps 75
-python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_dpm True --dpm_order 2 --dpm_steps 75
-python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 100 --use_dpm True --dpm_order 2 --dpm_steps 75
+# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_dpm True --dpm_order 2 --dpm_steps 75
+# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 5 --use_dpm True --dpm_order 2 --dpm_steps 75
+# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_dpm True --dpm_order 2 --dpm_steps 75
+# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 100 --use_dpm True --dpm_order 2 --dpm_steps 75
 
-# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_dpm True --dpm_order 3 --dpm_steps 500
-# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_dpm True --dpm_order 3 --dpm_steps 250
-# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_dpm True --dpm_order 3 --dpm_steps 100
-# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_dpm True --dpm_order 3 --dpm_steps 75
-# python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 25 --use_dpm True --dpm_order 3 --dpm_steps 50
+python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_dpm True --dpm_order 3 --dpm_steps 250
+python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_dpm True --dpm_order 3 --dpm_steps 100
+python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_dpm True --dpm_order 3 --dpm_steps 75
+python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_dpm True --dpm_order 3 --dpm_steps 500
+python -m eval.eval_humanml --model_path ${model_path} --eval_mode omnicontrol --control_joint 0 --density 1 --use_dpm True --dpm_order 3 --dpm_steps 50
 
 
 # # eval left foot
