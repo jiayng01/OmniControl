@@ -1,0 +1,21 @@
+    {
+        "text_prompt": "predefined",
+        "model_path": "./save/omnicontrol_ckpt/model_humanml3d.pt",
+        "output_dir": "",
+        "num_repetitions": 3,
+        "dataset": "humanml",
+        "seed": 10,
+        "guidance_param": 2.5,
+        "motion_length": 6.0,
+        "batch_size": 64,
+        "device": 0,
+        "num_samples": 10,
+        "cond_mode": "both_text_spatial",
+        "use_ddim": false,
+        "use_dpm": false,
+        "dpm_order": 2,
+        "dpm_steps": 20,
+        "timestep_respacing": "",
+        "unconstrained": false,
+        "latent_dim": 512
+    }

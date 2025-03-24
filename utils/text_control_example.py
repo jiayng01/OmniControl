@@ -873,6 +873,7 @@ def collate_all(n_frames, dataset):
     texts0, hints0, _ = pelvis_dense_text_control_example(
         n_frames, raw_mean, raw_std, index=0
     )
+    print(texts0, hints0.shape)
     texts1, hints1, _ = pelvis_sparse_text_control_example(
         n_frames, raw_mean, raw_std, index=0
     )
@@ -894,16 +895,4 @@ def collate_all(n_frames, dataset):
     return texts, hints
 
 
-spatial_norm_path = "./dataset/humanml_spatial_norm"
-n_frames = 196
-raw_mean = np.load(pjoin(spatial_norm_path, "Mean_raw.npy"))
-raw_std = np.load(pjoin(spatial_norm_path, "Std_raw.npy"))
-texts0, hints0, _ = pelvis_dense_text_control_example(
-    n_frames, raw_mean, raw_std, index=0
-)
-texts1, hints1, _ = pelvis_sparse_text_control_example(
-    n_frames, raw_mean, raw_std, index=0
-)
-
-print(hints0.shape)
-print(hints1.shape)
+# collate_all(196, "humanml")

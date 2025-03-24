@@ -477,7 +477,7 @@ if __name__ == "__main__":
     if args.use_ddim:
         log_file += f"_{args.timestep_respacing}"
     elif args.use_dpm:
-        log_file += f"_dpm{args.dpm_order}"
+        log_file += f"_dpm{args.dpm_order}_nfe{args.dpm_steps}"
 
     log_file += ".log"
     print(f"Logging results to [{log_file}]")

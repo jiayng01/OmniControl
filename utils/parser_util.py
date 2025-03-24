@@ -11,12 +11,14 @@ def parse_and_load_from_model(parser):
     add_model_options(parser)
     add_diffusion_options(parser)
     args = parser.parse_args()
+    print("arg")
     args_to_overwrite = []
     for group_name in ["dataset", "model", "diffusion"]:
         args_to_overwrite += get_args_per_group_name(parser, args, group_name)
 
     # load args from model
     model_path = get_model_path_from_args()
+
     args_path = os.path.join(os.path.dirname(model_path), "args.json")
     # assert os.path.exists(args_path), 'Arguments json file was not found!'
     if os.path.exists(args_path):
