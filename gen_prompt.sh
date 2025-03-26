@@ -5,50 +5,77 @@ REPEATS=1
 COND_MODE_TEXT="only_text"
 COND_MODE_BOTH="both_text_spatial"
 DENSITY=49  # 25% of 196 frames
-TEXT_PROMPT="the person throws out their left arm in front of them then brings both hands to their mouth before lowering them together to the center of their body."
+TEXT_PROMPT="predefined"
 TIMESTEP_RESPACING="ddim500"
 
-# # === TEXT-ONLY MODE ===
-# echo "Running TEXT-ONLY without prompt decomposition..."
-# python -m sample.generate \
-#     --model_path $MODEL_PATH \
-#     --num_repetitions $REPEATS \
-#     --text_prompt "$TEXT_PROMPT" \
-#     --cond_mode $COND_MODE_TEXT \
-#     --timestep_respacing $TIMESTEP_RESPACING \
-#     --use_ddim True \
-#     --output_dir ./save/results/text_only_no_decomp
-
-echo "Running TEXT-ONLY with prompt decomposition..."
+echo "Generating ddim50"
 python -m sample.generate \
     --model_path $MODEL_PATH \
-    --num_repetitions $REPEATS \
     --text_prompt "$TEXT_PROMPT" \
-    --cond_mode $COND_MODE_TEXT \
-    --timestep_respacing $TIMESTEP_RESPACING \
-    --decompose_prompt True \
+    --timestep_respacing "ddim50" \
     --use_ddim True \
-    --output_dir ./save/results/text_only_with_decomp
+    --output_dir ./save/results/ddim50 \
+    --num_repetitions $REPEATS
 
+echo "Generating ddim100"
+python -m sample.generate \
+    --model_path $MODEL_PATH \
+    --text_prompt "$TEXT_PROMPT" \
+    --timestep_respacing "ddim100" \
+    --use_ddim True \
+    --output_dir ./save/results/ddim50 \
+    --num_repetitions $REPEATS
 
-# # === TEXT + SPATIAL MODE (25%) ===
-# echo "Running TEXT + SPATIAL (25%) without prompt decomposition..."
-# python -m sample.generate \
-#     --model_path $MODEL_PATH \
-#     --num_repetitions $REPEATS \
-#     --text_prompt "$TEXT_PROMPT" \
-#     --cond_mode $COND_MODE_BOTH \
-#     --timestep_respacing $TIMESTEP_RESPACING \
-#     --use_ddim True \
-#     --output_dir ./save/results/both_25_no_decomp
+echo "Generating ddim250"
+python -m sample.generate \
+    --model_path $MODEL_PATH \
+    --text_prompt "$TEXT_PROMPT" \
+    --timestep_respacing "ddim250" \
+    --use_ddim True \
+    --output_dir ./save/results/ddim250 \
+    --num_repetitions $REPEATS
 
-# echo "Running TEXT + SPATIAL (25%) with prompt decomposition..."
-# python -m sample.generate \
-#     --model_path $MODEL_PATH \
-#     --num_repetitions $REPEATS \
-#     --text_prompt "$TEXT_PROMPT" \
-#     --cond_mode $COND_MODE_BOTH \
-#     --timestep_respacing $TIMESTEP_RESPACING \
-#     --decompose_prompt True\
-#     --use_ddim True \
-#     --output_dir ./save/results/both_25_with_decomp
+echo "Generating ddim500"
+python -m sample.generate \
+    --model_path $MODEL_PATH \
+    --text_prompt "$TEXT_PROMPT" \
+    --timestep_respacing "ddim500" \
+    --use_ddim True \
+    --output_dir ./save/results/ddim500 \
+    --num_repetitions $REPEATS
+
+echo "Generating dpm3_50steps"
+python -m sample.generate \
+    --model_path $MODEL_PATH \
+    --text_prompt "$TEXT_PROMPT" \
+    --dpm_steps 50 \
+    --use_dpm True \
+    --output_dir ./save/results/dpm3_50steps \
+    --num_repetitions $REPEATS
+
+echo "Generating dpm3_100steps"
+python -m sample.generate \
+    --model_path $MODEL_PATH \
+    --text_prompt "$TEXT_PROMPT" \
+    --dpm_steps 100 \
+    --use_dpm True \
+    --output_dir ./save/results/dpm3_100steps \
+    --num_repetitions $REPEATS
+
+echo "Generating dpm3_250steps"
+python -m sample.generate \
+    --model_path $MODEL_PATH \
+    --text_prompt "$TEXT_PROMPT" \
+    --dpm_steps 250 \
+    --use_dpm True \
+    --output_dir ./save/results/dpm3_250steps \
+    --num_repetitions $REPEATS
+
+echo "Generating dpm3_500steps"
+python -m sample.generate \
+    --model_path $MODEL_PATH \
+    --text_prompt "$TEXT_PROMPT" \
+    --dpm_steps 500 \
+    --use_dpm True \
+    --output_dir ./save/results/dpm3_500steps \
+    --num_repetitions $REPEATS

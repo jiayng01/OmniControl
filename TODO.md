@@ -13,3 +13,4 @@ python -m train.train_mdm --save_dir save/my_omnicontrol --dataset humanml --num
 - max_text_len = 20
 - spatial guidance after is better for dpm
 - 75 steps for ddim, dpm2, all densities
+- is DPMSolverMultistepScheduler classifier free?
