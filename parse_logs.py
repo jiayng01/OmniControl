@@ -59,6 +59,17 @@ def parse_log_file(file_path):
     return metrics
 
 
+def parse_time_file(time_file_path):
+    aits = None
+    with open(time_file_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if "Average inference time per sample:" in line:
+                m = re.search(r"Average inference time per sample:\s*([0-9.]+)", line)
+                if m:
+                    aits = float(m.group(1))
+    return aits
+
+
 def extract_filename_info(filename):
     info = {}
     # Density
@@ -79,6 +90,14 @@ def extract_filename_info(filename):
         n = re.search(r"nfe(\d+)", filename)
         if n:
             info["Timesteps"] = int(n.group(1))
+    else:
+        # Default to DDPM if no DDIM or DPM tag found
+        info["Method"] = "DDPM"
+        # For DDPM, timesteps depend on filename suffix
+        if filename.endswith("_1000.log"):
+            info["Timesteps"] = 0
+        else:
+            info["Timesteps"] = 1000
 
     return info
 
@@ -92,6 +111,13 @@ def main(log_dir, output_csv):
         metrics = parse_log_file(log_file)
         if not metrics:
             continue
+        # Parse average inference time
+        time_dir = (log_file.parent / ".." / "times").resolve()
+        time_file = time_dir / (fname[:-4] + "_time.log")
+        aits = None
+        if time_file.exists():
+            aits = parse_time_file(time_file)
+        metrics["AITS"] = aits
         # Extract info from filename
         info = extract_filename_info(fname)
         # Combine info and metrics
@@ -110,6 +136,7 @@ def main(log_dir, output_csv):
         "Traj. err (50 cm)",
         "Loc. err (50 cm)",
         "Avg. err",
+        "AITS",
     ]
 
     # Write to CSV
@@ -123,7 +150,4 @@ def main(log_dir, output_csv):
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) != 3:
-        print("Usage: python parse_logs.py <log_directory> <output_csv_path>")
-    else:
-        main(sys.argv[1], sys.argv[2])
+    main("save/omnicontrol_ckpt/actual", "res.csv")
